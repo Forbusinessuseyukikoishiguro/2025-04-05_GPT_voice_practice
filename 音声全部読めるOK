@@ -1,0 +1,155 @@
+# OSモジュールをインポート - ファイル操作や環境変数へのアクセスなどOSレベルの操作が可能になります
+import os
+
+# requestsモジュールをインポート - HTTPリクエストを送信するための人気ライブラリです
+import requests
+
+# pygameモジュールをインポート - 音声再生機能を利用します
+import pygame
+
+# tempfileモジュールをインポート - 一時ファイルの作成に使用します
+import tempfile
+
+# トラブルシューティング用のロギングモジュール
+import logging
+
+# ログの基本設定
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# pygameの音声ミキサーを初期化 - 音声再生の準備
+pygame.mixer.init()
+
+# OpenAIのAPIキーを環境変数から取得 - セキュリティのため、APIキーはコード内に直接書きません
+def get_api_key():
+    """APIキーを安全に取得する関数"""
+    api_key = os.environ.get("ｘｘ")
+    if not api_key:
+        logging.error("OpenAI APIキーが設定されていません。環境変数OPENAI_API_KEYを設定してください。")
+        raise ValueError("APIキーが見つかりません")
+    return api_key
+
+# HTTPリクエストのヘッダーを設定
+def get_headers():
+    """APIリクエスト用のヘッダーを作成する関数"""
+    return {
+        "Authorization": f"Bearer {get_api_key()}",
+        "Content-Type": "application/json",
+    }
+
+def text_to_speech(text, voice="alloy"):
+    """
+    テキストを音声に変換して再生する関数
+    
+    引数:
+    - text: 読み上げるテキスト
+    - voice: 使用する音声の種類 (デフォルト: alloy)
+    
+    戻り値:
+    - 成功した場合はTrue、失敗した場合はFalse
+    """
+    try:
+        # APIリクエスト用のデータを準備
+        data = {
+            "model": "tts-1",
+            "input": text,
+            "voice": voice,
+        }
+
+        # OpenAIのText-to-Speech APIにリクエストを送信
+        response = requests.post(
+            "https://api.openai.com/v1/audio/speech",
+            headers=get_headers(),
+            json=data,
+        )
+
+        # レスポンスのステータスをチェック
+        response.raise_for_status()  # 200番台以外のステータスコードでは例外を発生
+
+        # 一時ファイルを作成して音声データを保存
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as temp_audio:
+            temp_audio_path = temp_audio.name
+            temp_audio.write(response.content)
+        
+        logging.info(f"音声ファイルを一時ファイル {temp_audio_path} に保存")
+
+        # pygameで音声を再生
+        pygame.mixer.music.load(temp_audio_path)
+        pygame.mixer.music.play()
+
+        # 再生が完了するまで待機
+        while pygame.mixer.music.get_busy():
+            pygame.time.Clock().tick(10)
+
+        # 再生後、一時ファイルを削除
+        os.unlink(temp_audio_path)
+        logging.info("一時ファイルを削除しました")
+
+        return True
+
+    except requests.RequestException as e:
+        logging.error(f"APIリクエスト中にエラーが発生: {e}")
+        if response.status_code == 401:
+            logging.error("認証エラー：APIキーが無効か、正しく設定されていません")
+        return False
+
+    except Exception as e:
+        logging.error(f"予期せぬエラーが発生: {e}")
+        return False
+
+def main():
+    """
+    メインプログラム - テキスト読み上げのインタラクティブなインターフェース
+    """
+    print("テキスト読み上げシステム（終了するには 'exit' と入力）")
+    print("利用可能な声: alloy, echo, fable, onyx, nova, shimmer")
+
+    while True:
+        try:
+            # テキスト入力
+            text = input("\n読み上げるテキスト: ")
+
+            # 終了判定
+            if text.lower() == "exit":
+                break
+
+            # 音声タイプ入力
+            voice = input("使用する声 (デフォルト: alloy): ") or "alloy"
+
+            # テキスト読み上げを実行
+            if text_to_speech(text, voice):
+                print("音声再生が完了しました。")
+            else:
+                print("音声再生中にエラーが発生しました。")
+
+        except KeyboardInterrupt:
+            print("\nプログラムを中断します。")
+            break
+        except Exception as e:
+            print(f"予期せぬエラーが発生: {e}")
+
+if __name__ == "__main__":
+    main()
+
+"""
+# セットアップと実行手順
+
+1. 仮想環境の作成
+python -m venv venv
+
+2. 仮想環境のアクティベート
+# Windows: .\venv\Scripts\Activate
+# macOS/Linux: source venv/bin/activate
+
+3. 必要なライブラリのインストール
+pip install requests pygame
+
+4. OpenAI APIキーの設定
+# Windows PowerShell
+$env:OPENAI_API_KEY="your_api_key_here"
+
+# macOS/Linux
+export OPENAI_API_KEY="your_api_key_here"
+
+5. スクリプトの実行
+python voice_app.py
+"""
